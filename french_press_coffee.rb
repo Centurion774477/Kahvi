@@ -12,7 +12,7 @@ def lex line
         id: $~[:id],
         event_type: $~[:type]
         }
-    when /enforce\s+(\'|\")\s*(?<id>.*)\s*(\'|\")?as\s+a\s+(?<type>.*)$/
+    when /enforce\s+\'(?<id>.*)\'\s+as\s+a\s+(?<type>.*)$/
         unless %w|string word integer number|.include?($~[:type])
           fail "Invalid type assigned to an enforce statement: #{$~[:type]} "
         end
@@ -55,16 +55,16 @@ end
 def generateEnforcement token
     snippet = case token[:enforcement_type]
     when "string", "word"
-        <<-END
-        unless document.getElementById('#{token[:id]}.value == /^[a-zA-Z]+$/')
-            alert("input rejected: it must be a word.")
-            return
+        <<~END
+        unless document.getElementById('#{token[:id]}').value == /^[a-zA-Z]+$/
+          alert("input rejected: it must be a word.")
+          return
         END
     when "integer", "number"
-        <<-END
-        unless document.getElementById('#{token[:id]}.value == /^[0-9]+$/')
-            alert("input rejected: it must be a number.")
-            return
+        <<~END
+        unless document.getElementById('#{token[:id]}).value == /^[0-9]+$/'
+          alert("input rejected: it must be a number.")
+          return
         END
     end
   return snippet
@@ -72,7 +72,7 @@ end
 
 def generateElementAssignment token
   return <<~END
-    #{token[:variable]} = document.getElementById '#{token[:id]}'
+    #{token[:variable]} = document.getElementById #{token[:id]}
   END
 end
 
