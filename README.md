@@ -38,7 +38,7 @@ when ‘some-button-id’ is mousedover ->
 Second:
 
 ```
-enforce ‘some-id’s input as a word
+enforce ‘some-id' as a word
 ```
 
 This is a bit more magical than the first expression, but it's really just verifying input -- an action that is otherwise extremely tedious.
