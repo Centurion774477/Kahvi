@@ -38,11 +38,33 @@ def lex line
         type: :display,
         variable: $~[:variable]
     }
+    when /^(?<new_var>.*)\s+=\s+(?<variable>.*)\s+as\s+(a|an)\s+(?<type>.*)$/
+      return {
+        type: :type_mutation,
+        variable: $~[:variable],
+        new_type: $~[:type]
+      }
+    when /^if\s+(?<part_1>.+?)\s+aint\s+(?<part_2>.+)$/
+      puts "MATCHED"
+      return {
+        type: :aint_condition,
+        condition_one: $~[:part_1],
+        condition_two: $~[:part_2]
+      }
+    when "/^perform\s+(?<label>\w+)$/"
+      return {
+        type: :perform,
+        label: $~[:label]
+      }
+    when "end"
+      return {
+        type: :end
+      }
     else
-        return {
-            type: :coffeescript,
-            value: line
-        }
+      return {
+        type: :coffeescript,
+        value: line
+      }
     end
 end
 
@@ -88,6 +110,45 @@ def generateDisplayElement token
   END
 end
 
+def generateTypeMutation token
+  return <<~END
+    #{token[:variable]} = #{token[:new_type].capitalize}(#{token[:variable]})
+  END
+end
+
+def generateAintCondition token
+  return <<~END
+    if #{token[:condition_one]} isnt #{token[:condition_two]}
+  END
+end
+
+def generatePerform token
+  $inFunction = true
+  return <<~END
+    #{token[:label]} = () ->
+  END
+end
+
+def generateEnd 
+  unless $inFunction
+    puts "Unexpected end"
+    exit
+  end
+
+  if $lastFunctionName.nil?
+    puts "Something went wrong"
+    exit
+  end
+
+  $inFunction = false
+  return <<~END
+    #{$lastFunctionName}()
+  END
+end
+
+$lastFunctionName = nil
+$inFunction       = false # I couldn't care less about this being "bad"
+
 def generate token
     snippets = []
 
@@ -97,6 +158,10 @@ def generate token
     when :element_assignment then generateElementAssignment token
     when :hide               then generateHideElement token
     when :display            then generateDisplayElement token
+    when :type_mutation      then generateTypeMutation token
+    when :aint_condition     then generateAintCondition token
+    when :perform            then generatePerform token
+    when :end                then generateEnd
     when :coffeescript       then token[:value]
     end
 
@@ -118,7 +183,13 @@ file_to_write_to = ARGV[1]
 if file_to_write_to.nil? then fail "You must provide an output file." end
 
 File.open(file_to_write_to, 'w') do |file|
-    snippets.each {|snippet| file.puts snippet}
+    snippets.each do |snippet| 
+      if $inFunction
+        file.puts "  #{snippet}"
+      else
+        file.puts snippet
+      end
+    end
 end
 
 puts "Done brewing. Enjoy your CoffeeScript."
