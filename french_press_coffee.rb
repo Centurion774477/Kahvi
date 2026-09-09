@@ -42,7 +42,8 @@ def lex line
       return {
         type: :type_mutation,
         variable: $~[:variable],
-        new_type: $~[:type]
+        new_type: $~[:type],
+        new_var: $~[:new_var]
       }
     when /^if\s+(?<part_1>.+?)\s+aint\s+(?<part_2>.+)$/
       return {
@@ -144,7 +145,7 @@ end
 
 def generateTypeMutation token
   return <<~END
-    #{token[:variable]} = #{token[:new_type].capitalize}(#{token[:variable]})
+    #{token[:new_var]} = #{token[:new_type].capitalize}(#{token[:variable]})
   END
 end
 
@@ -269,10 +270,16 @@ def outputPage name
       <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Document</title>
+
+          <link rel="stylesheet" href="#{name}.css">
+          <title>#{name}}</title>
       </head>
       <body>
+
       <!--Hyvää koodausta, veli! - French Press CoffeeScript-->
+
+      <h1>#{name.capitalize}</h1>
+
       <script src="#{name}.js"></script>
       </body>
       </html>
@@ -289,6 +296,10 @@ def outputPage name
       # use `get someElement` to fetch an html element. It compiles to: someElement = document.getElementById 'some-element'
       # use kahvi_confirm "message" to stop the execution of a function if the user doesn't confirm.
       # 
+      # Also remember the commands used to parse this file into JavaScript or CoffeeScript respectively:
+      # fp full_send #{name}.frenchpress
+      # 
+      # fp compile #{name}.frenchpress
       # Happy programming! Hei Hei!
     END
   end
