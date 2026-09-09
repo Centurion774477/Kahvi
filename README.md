@@ -86,6 +86,35 @@ Evaluates to
 
 `x.style.display = ‘block’`
 
-That's French Press CoffeeScript! More will come in the future like the null check I mentioned earlier but I'll maintain the same idea from earlier: French Press CoffeeScript not getting in your way for your actual app logic.
+# Generate
 
-Hope you enjoyed, cheers!
+This is the other side of French Press CoffeeScript: it is used to scaffold files.
+
+Right now, the only function is to create a "page" -- which consists of a .frenchpress file,  a .styl (Stylus), and an HTML file.
+
+Here's how it looks:
+
+`fp generate blog`
+
+Outputs:
+- blog.html
+- blog.styl
+- blog.frenchpress
+
+And it appends this to your master script:
+```
+fp full_send blog.frenchpress
+stylus blog.styl
+```
+
+Allow me to explain what the master script is.
+
+The problem with preprocessors has always been wrangling the compile scripts; for the equivalent page setup you would have to track the Kahvi command as well as the stylus command, and then write them manually each time, as well as repeating that process for each page. If you generate a page using Kahvi, those commands will automatically be added to your masterscript. Once your app starts to get a bit bigger, this masterscript process should save you a good amount of time.
+
+
+# Conclusion
+
+Hope you enjoyed. This is in active development so bugs are quite common.
+I am working to add new features and fix bugs when I can.
+
+Cheers!
