@@ -45,20 +45,34 @@ def lex line
         new_type: $~[:type]
       }
     when /^if\s+(?<part_1>.+?)\s+aint\s+(?<part_2>.+)$/
-      puts "MATCHED"
       return {
         type: :aint_condition,
         condition_one: $~[:part_1],
         condition_two: $~[:part_2]
       }
-    when "/^perform\s+(?<label>\w+)$/"
+    when /^perform\s+(?<label>\w+)$/
       return {
         type: :perform,
         label: $~[:label]
       }
-    when "end"
+    when /^end$/
       return {
         type: :end
+      }
+    when /kahvi_confirm\s+(?<message>.*)$/
+      return {
+        type: :kahvi_confirm,
+        message: $~[:message]
+      }
+    when /(?<function_name>.*)\s+does$/
+      return {
+        type: :alternate_function,
+        name: $~[:function_name]
+      }
+    when /get\s+(?<element>.*)/
+      return {
+        type: :get_element,
+        element: $~[:element]
       }
     else
       return {
@@ -68,9 +82,21 @@ def lex line
     end
 end
 
+
 def generateEventListener token
+  event_type = token[:event_type]
+  coffeescript_event = case event_type
+  when 'clicked'                   then 'click'
+  when 'submitted'                 then 'submit'
+  when 'highlighted', 'mousedover' then 'mouseover'
+  when 'unhighlighted', 'mouseoff' then 'mouseout'
+  when 'typed', 'typing'           then 'input'
+  when 'changed'                   then 'change'
+  else event_type
+  end
+
   return <<~END
-    document.getElementById('#{token[:id]}').addEventListener '#{token[:event_type]}', () ->
+    document.getElementById('#{token[:id]}').addEventListener '#{coffeescript_event}', () ->
   END
 end
 
@@ -78,13 +104,19 @@ def generateEnforcement token
     snippet = case token[:enforcement_type]
     when "string", "word"
         <<~END
+        if document.getElementById('#{token[:id]}').value == '' or document.getElementById('#{token[:id]}').value == null
+          alert("Input rejected: input is empty.")
+          return
         unless document.getElementById('#{token[:id]}').value == /^[a-zA-Z]+$/
           alert("input rejected: it must be a word.")
           return
         END
     when "integer", "number"
         <<~END
-        unless document.getElementById('#{token[:id]}).value == /^[0-9]+$/'
+        if document.getElementById('#{token[:id]}').value == '' or document.getElementById('#{token[:id]}').value == null
+          alert("Input rejected: input is empty.")
+          return
+        unless document.getElementById('#{token[:id]}').value == /^[0-9]+$/
           alert("input rejected: it must be a number.")
           return
         END
@@ -124,6 +156,7 @@ end
 
 def generatePerform token
   $inFunction = true
+  $lastFunctionName = token[:label]
   return <<~END
     #{token[:label]} = () ->
   END
@@ -141,8 +174,35 @@ def generateEnd
   end
 
   $inFunction = false
-  return <<~END
+
+  snippet = <<~END
     #{$lastFunctionName}()
+  END
+
+  $lastFunctionName = nil
+  return snippet
+end
+
+def generateKahviConfirm token
+  return <<~END
+    unless confirm(#{token[:message]})
+      return
+  END
+end
+
+# eventually add a way to add arguments to these functions
+def generateAlternateFunction token
+  return <<~END
+    #{token[:name]} = () ->
+  END
+end
+
+# get saveButton
+def generateGetElement token
+  variable = token[:element]
+  element_id = variable.gsub(/([A-Z])/, '-\1').downcase
+  return <<~END
+    #{variable} = document.getElementById '#{element_id}'
   END
 end
 
@@ -161,7 +221,10 @@ def generate token
     when :type_mutation      then generateTypeMutation token
     when :aint_condition     then generateAintCondition token
     when :perform            then generatePerform token
-    when :end                then generateEnd
+    when :end                then generateEnd()
+    when :kahvi_confirm      then generateKahviConfirm token
+    when :alternate_function then generateAlternateFunction token
+    when :get_element        then generateGetElement token
     when :coffeescript       then token[:value]
     end
 
@@ -169,29 +232,125 @@ def generate token
     return snippets
 end
 
-file_to_read_from = ARGV[0]
+def generateCoffeeScript file_to_read_from, file_to_write_to
+  lines        = File.readlines(file_to_read_from)
+  tokens       = lines.map { |line| lex line.chomp }
+  snippets     = tokens.map { |token| generate token }
 
-if file_to_read_from.nil? then fail "You must provide an input file." end
+  if file_to_write_to.nil? then fail "You must provide an output file." end
 
-lines        = File.readlines(file_to_read_from)
-tokens       = lines.map { |line| lex line.chomp }
-# lines.map { |line| p line }
-snippets     = tokens.map { |token| generate token }
-
-file_to_write_to = ARGV[1]
-
-if file_to_write_to.nil? then fail "You must provide an output file." end
-
-File.open(file_to_write_to, 'w') do |file|
+  File.open(file_to_write_to, 'w') do |file|
     snippets.each do |snippet| 
-      if $inFunction
-        file.puts "  #{snippet}"
-      else
-        file.puts snippet
-      end
+      file.puts snippet
     end
+  end
 end
 
-puts "Done brewing. Enjoy your CoffeeScript."
+# compile
+def outputCoffeeScript file_in, file_out
+  generateCoffeeScript file_in, file_out
+  puts "Done brewing. Enjoy your CoffeeScript."
+end
 
-# eventually I'll have it transpile the CoffeeScript too so it returns JavaScript
+# full_send
+def outputJavaScript file_in, file_out
+  generateCoffeeScript file_in, file_out
+
+  `coffee --compile #{file_out}`
+end
+
+# generate
+# this will need refactoring later. Right now it just dumps everything into one directory
+def outputPage name
+  File.open("#{name}.html", 'w') do |file|
+    file.puts <<~END
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Document</title>
+      </head>
+      <body>
+      <!--Hyvää koodausta, veli! - French Press CoffeeScript-->
+      <script src="#{name}.js"></script>
+      </body>
+      </html>
+    END
+  end
+
+  File.open("#{name}.frenchpress", 'w') do |file|
+    file.puts <<~END
+      # Hei! Here are some of the features of FPCS you should know:
+      # 
+      # use `hide x` to hide an element; x.style.display = 'none'
+      # the opposite `display x` displays an element; x.style.display = 'block'
+      # 
+      # use `get someElement` to fetch an html element. It compiles to: someElement = document.getElementById 'some-element'
+      # use kahvi_confirm "message" to stop the execution of a function if the user doesn't confirm.
+      # 
+      # Happy programming! Hei Hei!
+    END
+  end
+
+  File.open("#{name}.styl", 'w') do |file|
+    file.puts <<~END
+      /* 
+      Stylus docs: https://stylus-lang.com/docs/
+      Happy styling!
+      */
+    END
+  end
+
+  File.open("french_press_master.sh", 'a') do |file|
+    file.puts <<~END
+      fp full_send #{name}.frenchpress
+      stylus #{name}.styl
+    END
+  end
+end
+
+# what-is-kahvi
+def outputInformation
+  puts "foobar; work in progress"
+  exit
+end
+
+command           = ARGV[0]
+file_to_read_from = ARGV[1]
+file_to_write_to  = ARGV[2]
+
+if file_to_read_from.nil? 
+  if command == "generate"
+    puts "You must provide a name for the page"
+    exit
+  elsif command == "what-is-kahvi"
+    return # what-is-kahvi doesn't require any arguments
+  else 
+    puts "You must provide an input file."
+    exit
+  end
+end
+
+
+case command
+when 'full_send' 
+  unless File.extname(file_to_write_to) == '.js'
+    puts "Your file extension must be .js -- you passed #{File.extname(file_to_write_to)}"
+    exit
+  end
+
+  outputJavaScript file_to_read_from, file_to_write_to
+when 'compile' 
+  unless File.extname(file_to_write_to) == '.coffee'
+    puts "Your file extension must be .coffee -- you passed #{File.extname(file_to_write_to)}"
+    exit
+  end
+  outputCoffeeScript file_to_read_from, file_to_write_to
+when 'generate'      then outputPage file_to_read_from
+when 'what-is-kahvi' then outputInformation()
+else 
+  puts "Invalid command: #{command}. Type 'what-is-kahvi' for help"
+  exit
+end
+
