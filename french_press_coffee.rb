@@ -75,6 +75,12 @@ def lex line
         type: :get_element,
         element: $~[:element]
       }
+    when /^(?<variable>.*)\s+=\s+right\s+now\s+in\s+(?<type>(hours|minutes|seconds|full))/
+      return {
+        type: :right_now,
+        time: $~[:type],
+        variable: $~[:variable]
+      }
     else
       return {
         type: :coffeescript,
@@ -207,6 +213,35 @@ def generateGetElement token
   END
 end
 
+# hours|minutes|seconds|full
+def generateRightNow token
+  case token[:time]
+  when 'hours'
+    return <<~END
+      now = new Date()
+      #{token[:variable]} = now.getHours()
+    END
+  when 'minutes'
+    return <<~END
+      now = new Date()
+      #{token[:variable]} = now.getMinutes()
+    END
+  when 'seconds'
+    return <<~END
+      now = new Date()
+      #{token[:variable]} = now.getSeconds()
+    END
+  when 'full'
+    return <<~END
+      now = new Date()
+      hours = now.getHours()
+      minutes = now.getMinutes()
+      seconds = now.getSeconds()
+      #{token[:variable]} = "\#{hours}:\#{minutes}:\#{seconds}"
+    END
+  end
+end
+
 $lastFunctionName = nil
 $inFunction       = false # I couldn't care less about this being "bad"
 
@@ -226,6 +261,7 @@ def generate token
     when :kahvi_confirm      then generateKahviConfirm token
     when :alternate_function then generateAlternateFunction token
     when :get_element        then generateGetElement token
+    when :right_now          then generateRightNow token
     when :coffeescript       then token[:value]
     end
 
@@ -272,7 +308,7 @@ def outputPage name
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
           <link rel="stylesheet" href="#{name}.css">
-          <title>#{name}}</title>
+          <title>#{name.capitalize}</title>
       </head>
       <body>
 
@@ -300,6 +336,7 @@ def outputPage name
       # fp full_send #{name}.frenchpress
       # 
       # fp compile #{name}.frenchpress
+      #
       # Happy programming! Hei Hei!
     END
   end
@@ -344,8 +381,15 @@ if file_to_read_from.nil?
 end
 
 
+
+
 case command
 when 'full_send' 
+  if file_to_write_to.nil?
+    puts "No output file was provided."
+    exit
+  end
+
   unless File.extname(file_to_write_to) == '.js'
     puts "Your file extension must be .js -- you passed #{File.extname(file_to_write_to)}"
     exit
@@ -353,6 +397,10 @@ when 'full_send'
 
   outputJavaScript file_to_read_from, file_to_write_to
 when 'compile' 
+  if file_to_write_to.nil?
+    puts "No output file was provided."
+    exit
+  end
   unless File.extname(file_to_write_to) == '.coffee'
     puts "Your file extension must be .coffee -- you passed #{File.extname(file_to_write_to)}"
     exit
