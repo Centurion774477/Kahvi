@@ -2,6 +2,12 @@
 
 def lex line
     case line
+    when /^(?<variable>.*)\s+=\s+get(?<url>.*)$/
+      return {
+        type: :get_request,
+        variable: $~[:variable],
+        url: $~[:url]
+      }
     when /when\s+(\'|\")\s*(?<id>[^'"]*)\s*(\'|\")\s+is\s+(?<type>\w+)\s+->$/
         unless %w|clicked submitted highlighted mousedover unhighlighted mouseoff typed typing changed|.include?($~[:type])
           fail "Invalid type assigned to an event listener: #{$~[:type]} "
@@ -22,6 +28,18 @@ def lex line
         id: $~[:id],
         enforcement_type: $~[:type]
         }
+    when /^if\s+(?<variable>.*)\s+is\s+(?<first_check>.*)\s+oris\s+(?<second_check>.*)$/
+      return {
+        type: :oris_conditional,
+        variable: $~[:variable],
+        first_check: $~[:first_check]
+      }
+    when /if\s+(?<variable>.*)\s+is\s+(?<status>(correct|good|wrong|bad))/
+      return {
+        type: :if_correct_or_bad,
+        variable: $~[:variable],
+        status: $~[:status]
+      }
     when /(?<variable>.*)\s+refers\s+to\s+(?<id>.*)$/
         return {
             type: :element_assignment,
@@ -87,6 +105,22 @@ def lex line
         value: line
       }
     end
+end
+
+def camelize(string, first_letter_upper: false)
+  words = string
+    .gsub(/([a-z\d])([A-Z])/, '\1 \2')
+    .scan(/[a-zA-Z0-9]+/)
+
+  return "" if words.empty?
+
+  # Capitalize each word
+  capitalized_words = words.map(&:capitalize)
+
+  # Lowercase the very first word if lower camelCase is required
+  capitalized_words[0] = capitalized_words[0].downcase unless first_letter_upper
+
+  capitalized_words.join
 end
 
 
@@ -213,7 +247,6 @@ def generateGetElement token
   END
 end
 
-# hours|minutes|seconds|full
 def generateRightNow token
   case token[:time]
   when 'hours'
@@ -242,8 +275,44 @@ def generateRightNow token
   end
 end
 
+def generateStatusConditional token
+  variable = token[:variable]
+
+  return case token[:status]
+  when 'correct', 'good'
+    <<~END
+    if #{variable} isnt "" and #{variable} isnt null
+    END
+  when 'wrong', 'bad'
+    <<~END
+    if #{variable} is "" or #{variable} is null
+    END
+  end
+end
+
+def generateGetRequest token
+  function_name = camelize(token[:variable])
+  return <<~END
+    #{token[:variable]} = null
+    
+    #{function_name} = (url) ->
+      try
+        response = await fetch(url)
+
+        unless response.ok
+          throw new Error "Response status: ${response.status}"
+        
+        #{token[:variable]} = await response.json()
+        
+      catch (error)
+        console.error(error.message)
+          
+    #{function_name}(#{token[:url].lstrip})
+  END
+end
+
 $lastFunctionName = nil
-$inFunction       = false # I couldn't care less about this being "bad"
+$inFunction       = false
 
 def generate token
     snippets = []
@@ -262,6 +331,8 @@ def generate token
     when :alternate_function then generateAlternateFunction token
     when :get_element        then generateGetElement token
     when :right_now          then generateRightNow token
+    when :if_correct_or_bad  then generateStatusConditional token
+    when :get_request        then generateGetRequest token
     when :coffeescript       then token[:value]
     end
 
@@ -379,9 +450,6 @@ if file_to_read_from.nil?
     exit
   end
 end
-
-
-
 
 case command
 when 'full_send' 
