@@ -435,6 +435,42 @@ def outputInformation
   exit
 end
 
+
+def doubleCheck line
+  if [
+    line.include?("enforce"), 
+    line.include?("when"), 
+    line.include?("get"), 
+    line.include?("refers"),
+    line.include?("kahvi_confirm")
+  ].any? then return true else return false end
+end
+
+def outputProofReading file_in
+  begin
+    lines = File.readlines(file_in)
+  rescue
+    puts "An error occured while trying to read from #{file_in}".
+    exit
+  end
+  
+  lines.each do |line|
+    token = lex line
+    
+    if token[:type] == :coffeescript
+      if doubleCheck(line) == true
+        puts <<~END
+        There appears to be a typo on line #{line}.
+        This may be a mistake, but a Kahvi keyword was detected in this line.
+        END
+        exit
+      end
+    end
+  end
+  puts "Your file appears to be fine."
+  exit
+end
+
 command           = ARGV[0]
 file_to_read_from = ARGV[1]
 file_to_write_to  = ARGV[2]
@@ -476,6 +512,7 @@ when 'compile'
   outputCoffeeScript file_to_read_from, file_to_write_to
 when 'generate'      then outputPage file_to_read_from
 when 'what-is-kahvi' then outputInformation()
+when 'typecheck', 'proofread' then outputProofReading(file_to_read_from)
 else 
   puts "Invalid command: #{command}. Type 'what-is-kahvi' for help"
   exit
